@@ -2,44 +2,44 @@ import { writable } from 'svelte/store'
 
 export const NETWORKS = [
   {
+    key: 'evm-rollux',
+    type: 'EVM',
+    chainIdHex: '0x23a',
+    name: 'Rollux',
+    symbol: 'SYS',
+    currencyName: 'Syscoin',
+    rpc: 'https://rpc.rollux.com',
+    explorer: 'https://explorer.rollux.com',
+  },
+  {
+    key: 'evm-sys-main',
+    type: 'EVM',
+    chainIdHex: '0x39',
+    name: 'Syscoin NEVM',
+    symbol: 'SYS',
+    currencyName: 'Syscoin',
+    rpc: 'https://rpc.syscoin.org',
+    explorer: 'https://explorer.syscoin.org',
+  },
+  {
     key: 'evm-eth',
     type: 'EVM',
     chainIdHex: '0x1',
-    name: 'Ethereum',
+    name: 'Ethereum Mainnet',
     symbol: 'ETH',
     currencyName: 'Ether',
     rpc: 'https://eth.llamarpc.com',
     explorer: 'https://etherscan.io',
   },
   {
-    key: 'evm-bnb',
-    type: 'EVM',
-    chainIdHex: '0x38',
-    name: 'BNB Smart Chain',
-    symbol: 'BNB',
-    currencyName: 'BNB',
-    rpc: 'https://bsc-dataseed.binance.org',
-    explorer: 'https://bscscan.com',
-  },
-  {
     key: 'evm-polygon',
     type: 'EVM',
     chainIdHex: '0x89',
-    name: 'Polygon',
+    name: 'Polygon Mainnet',
     symbol: 'POL',
     currencyName: 'Polygon',
     rpc: 'https://polygon-rpc.com',
     explorer: 'https://polygonscan.com',
-  },
-  {
-    key: 'evm-sys-main',
-    type: 'EVM',
-    chainIdHex: '0x39',
-    name: 'Syscoin NEVM Mainnet',
-    symbol: 'SYS',
-    currencyName: 'Syscoin',
-    rpc: 'https://rpc.syscoin.org',
-    explorer: 'https://explorer.syscoin.org',
   },
   {
     key: 'evm-sys-test',
@@ -49,37 +49,37 @@ export const NETWORKS = [
     symbol: 'TSYS',
     currencyName: 'Syscoin',
     rpc: 'https://rpc.tanenbaum.io',
-    explorer: 'https://tanenbaum.io',
+    explorer: 'https://explorer.tanenbaum.io',
   },
   {
-    key: 'evm-oasys',
+    key: 'evm-zk-tanenbaum',
     type: 'EVM',
-    chainIdHex: '0xf8',
-    name: 'Oasys Mainnet',
-    symbol: 'OAS',
-    currencyName: 'Oasys',
-    rpc: 'https://rpc.mainnet.oasys.games',
-    explorer: 'https://scan.oasys.games',
-  },
-  {
-    key: 'utxo-sys-main',
-    type: 'UTXO',
-    chainId: 57,
-    chainIdHex: '0x39',
-    name: 'Syscoin UTXO Mainnet',
-    symbol: 'SYS',
-    nevmRpc: 'https://rpc.syscoin.org',
-    explorer: 'https://explorer.syscoin.org',
-  },
-  {
-    key: 'utxo-sys-test',
-    type: 'UTXO',
-    chainId: 5700,
-    chainIdHex: '0x1644',
-    name: 'Syscoin UTXO Testnet',
+    chainIdHex: '0xdee1',
+    name: 'zkTanenbaum Testnet',
     symbol: 'TSYS',
-    nevmRpc: 'https://rpc.tanenbaum.io',
-    explorer: 'https://tanenbaum.io',
+    currencyName: 'Syscoin',
+    rpc: 'https://rpc-zk.tanenbaum.io',
+    explorer: 'https://explorer-zk.tanenbaum.io',
+  },
+  {
+    key: 'evm-hoodi',
+    type: 'EVM',
+    chainIdHex: '0x88bb0',
+    name: 'Ethereum Hoodi',
+    symbol: 'ETH',
+    currencyName: 'Ether',
+    rpc: 'https://rpc.hoodi.ethpandaops.io',
+    explorer: 'https://hoodi.etherscan.io',
+  },
+  {
+    key: 'evm-sepolia',
+    type: 'EVM',
+    chainIdHex: '0xaa36a7',
+    name: 'Ethereum Sepolia',
+    symbol: 'ETH',
+    currencyName: 'Ether',
+    rpc: 'https://ethereum-sepolia-rpc.publicnode.com',
+    explorer: 'https://sepolia.etherscan.io',
   },
 ]
 
@@ -265,6 +265,27 @@ export async function disconnect() {
   balance.set('0')
 }
 
+function isUnrecognizedChain(err) {
+  return (
+    err?.code === 4902 ||
+    err?.code === -32602 ||
+    err?.code === -32603 ||
+    /unrecognized chain|could not switch|chain not added|unable to switch|not exist|no.*found/i.test(
+      String(err?.message || ''),
+    )
+  )
+}
+
+function isAlreadyAdded(err) {
+  return (
+    err?.code === 4901 ||
+    (err?.code === 4001 && /cancel/i.test(String(err?.message || ''))) ||
+    /already (exist|added|previously added|available)|duplicate|network.*exists|already configured/i.test(
+      String(err?.message || ''),
+    )
+  )
+}
+
 async function addEthereumChain(network) {
   if (!network.rpc && !network.nevmRpc) {
     throw new Error('Red sin RPC configurado para añadirla')
@@ -287,30 +308,27 @@ async function addEthereumChain(network) {
   })
 }
 
+async function ensureNetworkAdded(network) {
+  try {
+    await addEthereumChain(network)
+  } catch (err) {
+    if (err?.code === 4001) throw err
+    if (!isAlreadyAdded(err)) throw err
+  }
+}
+
 export async function switchNetwork(network) {
   if (!network) throw new Error('Red no válida')
 
   if (network.type === 'EVM') {
     if (!_provider) throw new Error('Pali Wallet no detectada')
     try {
-      await _provider.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: network.chainIdHex }],
-      })
+      await switchToChain(network.chainIdHex)
     } catch (err) {
-      if (err?.code === 4902) {
-        await addEthereumChain(network)
-        try {
-          await _provider.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: network.chainIdHex }],
-          })
-        } catch {
-          /* puede que ya esté activa tras añadirla */
-        }
-      } else {
-        throw err
-      }
+      if (err?.code === 4001) throw err
+      if (!isUnrecognizedChain(err)) throw err
+      await ensureNetworkAdded(network)
+      await switchToChain(network.chainIdHex)
     }
     return
   }
@@ -321,22 +339,28 @@ export async function switchNetwork(network) {
       throw new Error('Proveedor UTXO no detectado')
     }
     try {
-      await pali.request({
-        method: 'sys_switchChain',
-        params: [{ chainId: network.chainId }],
-      })
+      await switchSysChain(pali, network.chainId)
     } catch (err) {
-      if (err?.code === 4902 || err?.message?.includes('could not switch')) {
-        await addEthereumChain(network)
-        await pali.request({
-          method: 'sys_switchChain',
-          params: [{ chainId: network.chainId }],
-        })
-      } else {
-        throw err
-      }
+      if (err?.code === 4001) throw err
+      if (!isUnrecognizedChain(err)) throw err
+      await ensureNetworkAdded(network)
+      await switchSysChain(pali, network.chainId)
     }
   }
+}
+
+async function switchToChain(chainIdHex) {
+  await _provider.request({
+    method: 'wallet_switchEthereumChain',
+    params: [{ chainId: chainIdHex }],
+  })
+}
+
+async function switchSysChain(pali, chainId) {
+  await pali.request({
+    method: 'sys_switchChain',
+    params: [{ chainId }],
+  })
 }
 
 export async function sendTransfer({ to, amount }) {
